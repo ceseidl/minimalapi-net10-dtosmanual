@@ -3,6 +3,10 @@ using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Threading.Tasks;
 using Xunit;
+using ProductApi.Domain;
+using ProductApi.Dtos;
+using ProductApi.Mapping;
+
 
 namespace ProductApi.Tests;
 
