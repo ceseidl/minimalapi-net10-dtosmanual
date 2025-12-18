@@ -1,61 +1,68 @@
 using Microsoft.AspNetCore.Http;
+
+// Este using precisa existir se você usa Product no "banco" em memória
+using ProductApi.Domain;
+
+// Se o método usar DTOs e mapeamento, importe também:
 using ProductApi.Dtos;
 using ProductApi.Mapping;
-using ProductApi.Repositories;
-using ProductApi.Validation;
 
 namespace ProductApi.Endpoints;
 
 public static class ProductEndpoints
 {
+    // Banco em memória simples só para exemplo
+    private static readonly List<Product> _db = new();
+
+    // Método de extensão sobre RouteGroupBuilder (observe o "this")
     public static RouteGroupBuilder MapProductsEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", async (IProductRepository repo) =>
-        {
-            var products = await repo.GetAllAsync();
-            var response = products.Select(p => p.ToDto());
-            return Results.Ok(response);
-        });
+        // GET /products
+        group.MapGet("/", () => _db.Select(p => p.ToDto()));
 
-        group.MapGet("/{id:guid}", async (Guid id, IProductRepository repo) =>
+        // GET /products/{id}
+        group.MapGet("/{id:guid}", (Guid id) =>
         {
-            var product = await repo.GetByIdAsync(id);
-            return product is null
+            var p = _db.FirstOrDefault(x => x.Id == id);
+            return p is null
                 ? Results.NotFound(new { message = "Produto não encontrado." })
-                : Results.Ok(product.ToDto());
+                : Results.Ok(p.ToDto());
         }).WithName("GetProductById");
 
-        group.MapPost("/", async (CreateProductRequest request, IProductRepository repo) =>
+        // POST /products
+        group.MapPost("/", (CreateProductRequest req) =>
         {
-            var entity = request.ToEntity();
-            var created = await repo.CreateAsync(entity);
-            return Results.CreatedAtRoute("GetProductById", new { id = created.Id }, created.ToDto());
-        }).AddEndpointFilter<ValidationFilter<CreateProductRequest>>();
+            var entity = req.ToEntity();
+            entity.Id = Guid.NewGuid();
+            _db.Add(entity);
+            return Results.CreatedAtRoute("GetProductById", new { id = entity.Id }, entity.ToDto());
+        });
 
-        group.MapPut("/{id:guid}", async (Guid id, UpdateProductRequest request, IProductRepository repo) =>
+        // PUT /products/{id}
+        group.MapPut("/{id:guid}", (Guid id, UpdateProductRequest req) =>
         {
-            if (id != request.Id)
+            if (id != req.Id)
                 return Results.BadRequest(new { message = "O ID da rota e o ID do corpo devem ser iguais." });
 
-            var exists = await repo.ExistsAsync(id);
-            if (!exists)
+            var idx = _db.FindIndex(x => x.Id == id);
+            if (idx < 0)
                 return Results.NotFound(new { message = "Produto não encontrado." });
 
-            var entity = request.ToEntity();
-            await repo.UpdateAsync(entity);
+            var updated = req.ToEntity();
+            _db[idx] = updated;
             return Results.NoContent();
-        }).AddEndpointFilter<ValidationFilter<UpdateProductRequest>>();
+        });
 
-        group.MapDelete("/{id:guid}", async (Guid id, IProductRepository repo) =>
+        // DELETE /products/{id}
+        group.MapDelete("/{id:guid}", (Guid id) =>
         {
-            var exists = await repo.ExistsAsync(id);
-            if (!exists)
+            var p = _db.FirstOrDefault(x => x.Id == id);
+            if (p is null)
                 return Results.NotFound(new { message = "Produto não encontrado." });
 
-            await repo.DeleteAsync(id);
+            _db.Remove(p);
             return Results.NoContent();
         });
 
         return group;
-    }
-}
+       }
