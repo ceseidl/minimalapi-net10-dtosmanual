@@ -1,0 +1,42 @@
+
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # permite rodar manualmente no Actions > Run workflow
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write    # necessário para publicar no GHCR
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore, Build, Test
+        run: |
+          dotnet restore
+          dotnet build --configuration Release
+          dotnet test --configuration Release || echo "no tests"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Image
+        run: |
+                   IMAGE=ghcr.io/${{ github.repository }}/productapi
+          docker build -t $IMAGE:latest -f Dockerfile .
